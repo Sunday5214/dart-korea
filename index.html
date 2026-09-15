@@ -12,6 +12,7 @@
 <title>전국 다트 여행</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gasoek+One&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
 /* 단일 비주얼 월드: 바디캠 녹화 화면. 모든 색을 명시적으로 칠한다. */
@@ -73,6 +74,50 @@ body{
 .hud.tl{top:14px; left:18px; display:flex; align-items:center; gap:12px; font-size:13px; font-weight:600}
 .hud.tr{top:14px; right:18px; display:flex; align-items:center; gap:9px; font-size:13px; font-weight:500}
 .hud.tr2{top:42px; right:18px; display:flex; align-items:center; gap:7px; font-size:12px; color:var(--lock); font-weight:500}
+.hud.tools{
+  bottom:32px; left:18px; display:flex; align-items:center; gap:10px;
+  font-size:11.5px; color:var(--lock); letter-spacing:.16em;
+}
+.hud.tools button{
+  pointer-events:auto; background:rgba(9,16,14,.82); border:1px solid var(--pane-line);
+  color:var(--hud); font-family:"IBM Plex Mono",monospace; font-size:11px;
+  letter-spacing:.14em; padding:5px 11px; border-radius:2px;
+}
+.hud.tools button:hover{border-color:var(--lock); color:var(--lock)}
+.hud.tools button:focus-visible{outline:2px solid var(--lock); outline-offset:2px}
+.hud.net{
+  top:44px; left:20px; width:300px; display:flex; flex-direction:column; gap:7px;
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--hud-dim);
+}
+.netrow{display:flex; flex-wrap:wrap; align-items:center; gap:5px; pointer-events:auto}
+.hud.net input{
+  pointer-events:auto; width:70px; background:rgba(0,0,0,.5); color:var(--hud);
+  border:1px solid var(--pane-line); border-radius:2px; padding:5px 7px;
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+}
+.hud.net input#codeIn{width:54px; text-transform:uppercase; letter-spacing:.2em}
+.hud.net input::placeholder{color:var(--hud-faint)}
+.hud.net input:focus-visible{outline:2px solid var(--lock); outline-offset:1px}
+.hud.net button{
+  pointer-events:auto; background:rgba(9,16,14,.86); border:1px solid var(--pane-line);
+  color:var(--hud); font-family:"IBM Plex Mono",monospace; font-size:11px;
+  letter-spacing:.1em; padding:5px 9px; border-radius:2px;
+}
+.hud.net button:hover{border-color:var(--lock); color:var(--lock)}
+.hud.net button:focus-visible{outline:2px solid var(--lock); outline-offset:2px}
+.hud.net .code{color:var(--lock); letter-spacing:.16em}
+.hud.net .code b{font-size:14px; letter-spacing:.24em}
+.lobby{display:flex; flex-wrap:wrap; gap:4px}
+.lobby .pl{
+  display:inline-flex; align-items:center; gap:5px; border:1px solid var(--pane-line);
+  border-radius:2px; padding:2px 7px; font-size:11px; color:var(--hud-dim);
+  background:rgba(9,16,14,.7);
+}
+.lobby .pl i{width:7px; height:7px; border-radius:50%; background:var(--c); display:block; opacity:.45}
+.lobby .pl.rdy{color:var(--hud); border-color:var(--c)}
+.lobby .pl.rdy i{opacity:1}
+.netstatus{color:var(--gold); font-size:11px; min-height:14px}
+.hud.tools button.fire{background:var(--lock); border-color:var(--lock); color:#06140C; font-weight:700}
 .hud.bl{bottom:34px; right:18px; font-size:11px; color:var(--lock); opacity:.9}
 .warr{width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; transition:transform .45s cubic-bezier(.2,.8,.3,1)}
 .meter{display:flex; gap:2px; align-items:center}
@@ -163,7 +208,7 @@ body{
 <div class="shell">
   <div class="topbar">
     <h1 class="wordmark">전국 <em>다트</em> 여행</h1>
-    <span class="topnote">클릭하면 카메라 4대가 다트를 따라붙습니다 · 옆 → 앞 → 뒤 → 착탄</span>
+    <span class="topnote">방을 만들어 함께 조준하고 동시에 던지세요 · 꽂힌 점들의 중심이 여행지가 됩니다</span>
   </div>
 
   <div class="stagewrap">
@@ -183,6 +228,26 @@ body{
       <div class="fx cut" id="cut"></div>
       <div class="hud shot" id="shot"></div>
       <div class="hud gust" id="gust"></div>
+      <div class="hud tools">
+        <span id="throwCount">THROWS 00</span>
+        <button id="newRound" type="button">새 판</button>
+        <button id="fireBtn" type="button" class="fire" style="display:none">동시에 던지기</button>
+      </div>
+      <div class="hud net">
+        <div id="joinBox" class="netrow">
+          <input id="nameIn" type="text" maxlength="8" placeholder="이름" autocomplete="off">
+          <button id="hostBtn" type="button">방 만들기</button>
+          <input id="codeIn" type="text" maxlength="4" placeholder="코드" autocomplete="off">
+          <button id="joinBtn" type="button">입장</button>
+        </div>
+        <div id="roomBox" class="netrow" style="display:none">
+          <span class="code">ROOM <b id="roomCode">----</b></span>
+          <span id="phaseMsg"></span>
+          <button id="leaveBtn" type="button">나가기</button>
+        </div>
+        <div id="lobby" class="lobby"></div>
+        <div id="netStatus" class="netstatus"></div>
+      </div>
       <div class="hud bl" id="coord">NO TARGET</div>
       <div class="hud bc" id="bottomline">DARTCAM</div>
     </div>
@@ -510,6 +575,7 @@ DESTS.forEach(function(d){
   t.textContent="서울"; gDots.appendChild(t);
 })();
 [gGrid,gLand,gDots,gPast,gAim].forEach(function(g){ board.appendChild(g); });
+var BOARD_LAYER=board;
 
 /* --- 추적 박스 (장면 좌표) --- */
 var SIGMA=24;                       /* 지도 1단위 ≈ 1.11km */
@@ -600,7 +666,7 @@ gHand.appendChild(heldDart);
 cam.appendChild(gHand);
 
 /* ===== 상태 ===== */
-var LS_LOG="dartkr.log.v1";
+var LS_ROUND="dartkr.round.v2", LS_RESULTS="dartkr.results.v2";
 var INCLUDE_ISLANDS=true;    /* 제주·울릉도 항상 포함 */
 var DEDUPE=true;             /* 이미 나온 곳은 빼되, 다 소진되면 전체에서 다시 고른다 */
 var stage=document.getElementById("stage");
@@ -610,13 +676,25 @@ var clockEl=document.getElementById("clock");
 var gustEl=document.getElementById("gust");
 var cutEl=document.getElementById("cut");
 var shotEl=document.getElementById("shot");
+var countEl=document.getElementById("throwCount");
+var nameEl=document.getElementById("nameIn");
+var codeInEl=document.getElementById("codeIn");
+var codeEl=document.getElementById("roomCode");
+var lobbyEl=document.getElementById("lobby");
+var phaseEl=document.getElementById("phaseMsg");
+var joinBoxEl=document.getElementById("joinBox");
+var roomBoxEl=document.getElementById("roomBox");
+var mpStatusEl=document.getElementById("netStatus");
+var fireBtn=document.getElementById("fireBtn");
 var busy=false, usedWind=null;
 var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function load(k,f){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):f; }catch(e){ return f; } }
 function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-var log = load(LS_LOG, []);
-if(!Array.isArray(log)) log=[];
+var round = load(LS_ROUND, []);      /* 이번 판에 꽂힌 점들 */
+var results = load(LS_RESULTS, []);  /* 지난 판들의 결과 — 중복 제외용 */
+if(!Array.isArray(round)) round=[];
+if(!Array.isArray(results)) results=[];
 
 function pad2(n){ n=String(n); return n.length<2 ? "0"+n : n; }
 function tickClock(){
@@ -626,7 +704,8 @@ function tickClock(){
 tickClock(); setInterval(tickClock, 30000);
 function setBottom(){
   var d=new Date();
-  bottomEl.textContent = "DARTCAM V1.0.2 KOREA_TRIP_ROULETTE 77_SPOTS THROW_"+pad2(log.length)+
+  bottomEl.textContent = "DARTCAM V1.0.3 KOREA_TRIP_ROULETTE 77_SPOTS GROUP_"+pad2(round.length)+
+    " ROUNDS_"+pad2(results.length)+
     " "+d.getFullYear()+"."+pad2(d.getMonth()+1)+"."+pad2(d.getDate());
 }
 
@@ -1119,33 +1198,42 @@ function throwDart(aimX, aimY, blind){
   });
 }
 
-var SEA_LINES=["파도만 출렁입니다. 한 번 더.","갈매기가 물고 갔습니다.","바다 한가운데 명중. 무효입니다.","배를 먼저 구해야 하는 좌표네요."];
+/* ===== 한 판 =====
+   여러 명이 차례로 던진다. 꽂힌 점들을 볼록껍질로 잇고,
+   그 점들의 평균(중심)에서 가장 가까운 곳이 이번 여행지가 된다.
+   바다에 꽂혀도 무효가 아니라 중심을 그쪽으로 당기는 역할을 한다. */
 
 function resolveThrow(x,y){
   var lon=toLon(x), lat=toLat(y);
   var inInset = Math.sqrt((x-INSET.cx)*(x-INSET.cx)+(y-INSET.cy)*(y-INSET.cy)) <= INSET.r+2.5;
-  var dest=null, offKm=0, why="";
+  round.push({x:x, y:y, t:Date.now(), sea:(!inInset && !onLand(lon,lat)), inset:inInset});
+  if(round.length>12) round.shift();
+  save(LS_ROUND, round);
+  renderRound();
+}
 
-  if(inInset){
-    if(!INCLUDE_ISLANDS) why="울릉도는 이번 여행에서 빼기로 했죠.";
-    else dest=ULLEUNG;
-  } else if(!onLand(lon,lat)){
-    why = SEA_LINES[Math.floor(Math.random()*SEA_LINES.length)];
-  } else if(onJeju(lon,lat) && !INCLUDE_ISLANDS){
-    why = "제주는 이번 여행에서 빼기로 했죠.";
-  } else {
-    var used = DEDUPE ? log.map(function(r){ return r.place; }) : [];
-    dest = nearest(lon,lat,used) || nearest(lon,lat,[]);
-    if(dest) offKm = hav(lat,lon,dest.lat,dest.lon);
+function centroid(){
+  var sx2=0, sy2=0, i;
+  for(i=0;i<round.length;i++){ sx2+=round[i].x; sy2+=round[i].y; }
+  return {x:sx2/round.length, y:sy2/round.length};
+}
+
+/* 볼록껍질 — 던진 순서와 상관없이 항상 깔끔하게 모두를 감싼다 */
+function hull(pts){
+  if(pts.length<3) return pts.slice();
+  var p=pts.slice().sort(function(a,b){ return (a.x-b.x)||(a.y-b.y); });
+  function cross(o,a,b){ return (a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x); }
+  var lo=[], hi=[], i;
+  for(i=0;i<p.length;i++){
+    while(lo.length>=2 && cross(lo[lo.length-2],lo[lo.length-1],p[i])<=0) lo.pop();
+    lo.push(p[i]);
   }
-
-  if(!dest){ renderMiss(why,x,y); return; }
-  var rec = {n:log.length+1, who:"", place:dest.name, region:dest.region, x:x, y:y, t:Date.now()};
-  log.unshift(rec);
-  if(log.length>40) log.length=40;
-  save(LS_LOG, log);
-  renderHit(dest, offKm, rec);
-  renderPast(); setBottom();
+  for(i=p.length-1;i>=0;i--){
+    while(hi.length>=2 && cross(hi[hi.length-2],hi[hi.length-1],p[i])<=0) hi.pop();
+    hi.push(p[i]);
+  }
+  lo.pop(); hi.pop();
+  return lo.concat(hi);
 }
 
 function nearest(lon,lat,used){
@@ -1161,68 +1249,474 @@ function nearest(lon,lat,used){
   return best;
 }
 
+function roundDest(){
+  if(!round.length) return null;
+  var c=centroid();
+  var inInset = Math.sqrt((c.x-INSET.cx)*(c.x-INSET.cx)+(c.y-INSET.cy)*(c.y-INSET.cy)) <= INSET.r+3;
+  if(inInset) return {dest:ULLEUNG, c:c};
+  var lon=toLon(c.x), lat=toLat(c.y);
+  return {dest: nearest(lon,lat,results) || nearest(lon,lat,[]), c:c};
+}
+
 /* ===== 렌더 ===== */
 function esc(s){
   return String(s).replace(/[&<>"]/g,function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];
   });
 }
-
 function windFact(){ return usedWind ? usedWind.shifts+"회 · "+usedWind.maxSpd.toFixed(1)+"m/s" : "—"; }
-/* 곧게 / 휘어 / 밀림 + 실제로 벗어난 거리 */
 function windEffectFact(){ return usedWind ? usedWind.note+" "+Math.round(usedWind.km)+"km" : "—"; }
 
-function renderHit(d, offKm, rec){
-  var fromSeoul = hav(SEOUL.lat,SEOUL.lon,d.lat,d.lon);
-  var dt = new Date(rec.t);
+function renderRound(){
+  gPast.innerHTML="";
+  countEl.textContent="THROWS "+pad2(round.length);
+  setBottom();
+
+  if(!round.length){
+    gTrack.setAttribute("opacity","0");
+    DESTS.forEach(function(o){
+      o.node.setAttribute("r",2.8); o.node.setAttribute("fill","#3F4C47"); o.node.setAttribute("fill-opacity",0.6);
+    });
+    coordEl.textContent="NO TARGET";
+    stage.className="result miss";
+    stage.innerHTML='<p class="rlabel">STANDBY</p><h2 class="place">첫 번째 사람</h2>'+
+      '<p class="missline">지도를 클릭해 던지세요. 한 명씩 던진 점을 이은 뒤 그 중심으로 갑니다.</p>';
+    return;
+  }
+
+  var rd=roundDest(), c=rd.c, d=rd.dest;
+
+  /* 점들을 감싼 도형 */
+  if(round.length>=3){
+    var h=hull(round);
+    if(h.length>=3){
+      gPast.appendChild(el("polygon",{
+        points:h.map(function(p){ return p.x.toFixed(1)+","+p.y.toFixed(1); }).join(" "),
+        fill:"#4BE07A","fill-opacity":0.1, stroke:"#4BE07A","stroke-width":1.6,
+        "stroke-opacity":0.75,"stroke-dasharray":"7 5","stroke-linejoin":"round"}));
+    }
+  }else if(round.length===2){
+    gPast.appendChild(el("line",{x1:round[0].x,y1:round[0].y,x2:round[1].x,y2:round[1].y,
+      stroke:"#4BE07A","stroke-width":1.6,"stroke-opacity":0.75,"stroke-dasharray":"7 5"}));
+  }
+
+  /* 중심까지 잇는 실 */
+  round.forEach(function(p){
+    gPast.appendChild(el("line",{x1:p.x,y1:p.y,x2:c.x,y2:c.y,
+      stroke:"#4BE07A","stroke-width":0.9,"stroke-opacity":0.3}));
+  });
+
+  /* 각자의 다트 */
+  round.forEach(function(p,i){
+    gPast.appendChild(el("circle",{cx:p.x,cy:p.y,r:3.4,
+      fill: p.sea ? "none" : "#E8402C", stroke:"#E8402C","stroke-width":1.8}));
+    gPast.appendChild(el("line",{x1:p.x,y1:p.y,x2:p.x+10,y2:p.y-10,
+      stroke:"#E8402C","stroke-width":1.8,"stroke-opacity":0.85}));
+    var t=el("text",{x:p.x+11,y:p.y-11,fill:"#E8402C","font-size":13,"font-weight":"700",
+      "font-family":"IBM Plex Mono, monospace","paint-order":"stroke",
+      stroke:"#DFE4DC","stroke-width":3,"stroke-linejoin":"round"});
+    t.textContent=String(i+1);
+    gPast.appendChild(t);
+  });
+
+  /* 중심 */
+  gPast.appendChild(el("circle",{cx:c.x,cy:c.y,r:9,fill:"none",stroke:"#4BE07A","stroke-width":2}));
+  gPast.appendChild(el("line",{x1:c.x-14,y1:c.y,x2:c.x+14,y2:c.y,stroke:"#4BE07A","stroke-width":1.6}));
+  gPast.appendChild(el("line",{x1:c.x,y1:c.y-14,x2:c.x,y2:c.y+14,stroke:"#4BE07A","stroke-width":1.6}));
+  gPast.appendChild(el("circle",{cx:c.x,cy:c.y,r:3,fill:"#4BE07A"}));
+
+  DESTS.forEach(function(o){
+    o.node.setAttribute("r",2.8); o.node.setAttribute("fill","#3F4C47"); o.node.setAttribute("fill-opacity",0.6);
+  });
+  if(!d){ gTrack.setAttribute("opacity","0"); return; }
+  d.node.setAttribute("r",5.4); d.node.setAttribute("fill","#E8402C"); d.node.setAttribute("fill-opacity",1);
+  setTrack(sx(d.x), sy(d.y), 48, 62, d.name, "#4BE07A", false);
+  coordEl.textContent="CENTER  "+toLat(c.y).toFixed(3)+"N "+toLon(c.x).toFixed(3)+"E";
+
+  /* 가장 멀리 던진 사람이 중심에서 얼마나 떨어져 있나 */
+  var clon=toLon(c.x), clat=toLat(c.y), spread=0;
+  round.forEach(function(p){
+    var km=hav(clat,clon,toLat(p.y),toLon(p.x));
+    if(km>spread) spread=km;
+  });
+  var fromSeoul=hav(SEOUL.lat,SEOUL.lon,d.lat,d.lon);
+  var dt=new Date();
+
   stage.className="result";
   stage.innerHTML =
     '<div class="stamp"><b>당첨</b><span>'+(dt.getMonth()+1)+'.'+dt.getDate()+'</span></div>'+
-    '<p class="rlabel">TARGET LOCKED · THROW '+pad2(rec.n)+'</p>'+
+    '<p class="rlabel">GROUP CENTER · '+pad2(round.length)+'명</p>'+
     '<h2 class="place">'+esc(d.name)+'</h2>'+
     '<div class="region">'+esc(d.region)+'</div>'+
     '<p class="tagline">'+esc(d.line)+'</p>'+
     '<div class="chips">'+d.spots.map(function(s){ return '<span class="chip">'+esc(s)+'</span>'; }).join("")+'</div>'+
     '<dl class="facts">'+
       '<div class="fact"><dt>서울에서</dt><dd>'+Math.round(fromSeoul)+' km</dd></div>'+
-      '<div class="fact"><dt>다트 오차</dt><dd>'+(offKm<1 ? "명중" : Math.round(offKm)+" km")+'</dd></div>'+
-      '<div class="fact"><dt>바람</dt><dd>'+windFact()+'</dd></div>'+
-      '<div class="fact"><dt>바람 영향</dt><dd>'+windEffectFact()+'</dd></div>'+
-      '<div class="fact"><dt>위도</dt><dd>'+d.lat.toFixed(3)+'°N</dd></div>'+
-      '<div class="fact"><dt>경도</dt><dd>'+d.lon.toFixed(3)+'°E</dd></div>'+
+      '<div class="fact"><dt>던진 사람</dt><dd>'+round.length+' 명</dd></div>'+
+      '<div class="fact"><dt>흔어짐</dt><dd>'+Math.round(spread)+' km</dd></div>'+
+      '<div class="fact"><dt>마지막 바람</dt><dd>'+windEffectFact()+'</dd></div>'+
+      '<div class="fact"><dt>중심 위도</dt><dd>'+clat.toFixed(3)+'°N</dd></div>'+
+      '<div class="fact"><dt>중심 경도</dt><dd>'+clon.toFixed(3)+'°E</dd></div>'+
     '</dl>';
-  DESTS.forEach(function(o){
-    o.node.setAttribute("r",2.8); o.node.setAttribute("fill","#3F4C47"); o.node.setAttribute("fill-opacity",.6);
-  });
-  d.node.setAttribute("r",5.4); d.node.setAttribute("fill","#E8402C"); d.node.setAttribute("fill-opacity",1);
-  setTrack(sx(d.x), sy(d.y), 48, 62, d.name, "#4BE07A", false);
-  coordEl.textContent = "LOCK  "+d.lat.toFixed(3)+"N "+d.lon.toFixed(3)+"E";
 }
 
-function renderMiss(why,x,y){
-  stage.className="result miss";
-  stage.innerHTML =
-    '<p class="rlabel" style="color:#A03226">NO TARGET · 무효</p>'+
-    '<h2 class="place">빗나갔습니다</h2>'+
-    '<p class="missline">'+esc(why)+'</p>'+
-    '<dl class="facts">'+
-      '<div class="fact"><dt>바람</dt><dd>'+windFact()+'</dd></div>'+
-      '<div class="fact"><dt>바람 영향</dt><dd>'+windEffectFact()+'</dd></div>'+
-      '<div class="fact"><dt>위도</dt><dd>'+toLat(y).toFixed(3)+'°N</dd></div>'+
-      '<div class="fact"><dt>경도</dt><dd>'+toLon(x).toFixed(3)+'°E</dd></div>'+
-    '</dl>';
-  setTrack(sx(x), sy(y), 46, 46, "NO TARGET", "#E8402C", false);
-  coordEl.textContent = "MISS  "+toLat(y).toFixed(3)+"N "+toLon(x).toFixed(3)+"E";
+/* 이번 판 결과를 기록하고 판을 비운다 */
+function newRound(){
+  var rd=roundDest();
+  if(rd && rd.dest && results.indexOf(rd.dest.name)<0){
+    results.unshift(rd.dest.name);
+    if(results.length>40) results.length=40;
+    save(LS_RESULTS, results);
+  }
+  round=[]; save(LS_ROUND, round);
+  gTrack.setAttribute("opacity","0");
+  while(gFlight.firstChild) gFlight.removeChild(gFlight.firstChild);
+  renderRound();
 }
 
+/* ===== 멀티플레이 (PeerJS 공개 브로커) =====
+   호스트가 방을 열고 모두의 상태를 들고 있는다. 손님은 조준만 보내고,
+   발사·바람·착지 계산은 전부 호스트가 해서 뿌리므로 모든 화면이 똑같이 보인다.
+   연결이 안 되면 그냥 1인용으로 동작한다. */
 
-function renderPast(){
-  gPast.innerHTML="";
-  log.slice(0,14).forEach(function(r,i){
-    var o = i===0 ? 1 : Math.max(.14, .5 - i*0.032);
-    gPast.appendChild(el("circle",{cx:r.x,cy:r.y,r:3.4,fill:"#E8402C","fill-opacity":o}));
-    gPast.appendChild(el("line",{x1:r.x,y1:r.y,x2:r.x+10,y2:r.y-10,stroke:"#E8402C","stroke-width":1.8,"stroke-opacity":o}));
+var COLORS=["#E8402C","#4BE07A","#E0AC4E","#5AA9E6","#C77DD6","#57D4C4"];
+var MP={
+  on:false, host:false, code:"", peer:null, conns:[], myId:"",
+  players:{},            /* id -> {id,name,color,aim,ready} */
+  phase:"lobby",         /* lobby | aim | count | fly | result */
+  order:[]
+};
+
+function mpMe(){ return MP.players[MP.myId]; }
+function mpList(){ return MP.order.map(function(id){ return MP.players[id]; }).filter(Boolean); }
+function mpReadyCount(){ return mpList().filter(function(p){ return p.ready; }).length; }
+
+function mpSend(conn,msg){ try{ conn.send(msg); }catch(e){} }
+function mpBroadcast(msg){ MP.conns.forEach(function(c){ mpSend(c,msg); }); }
+function mpToHost(msg){ if(MP.conns[0]) mpSend(MP.conns[0],msg); }
+
+function mpSnapshot(){
+  return {t:"state", phase:MP.phase, order:MP.order,
+    players:MP.order.map(function(id){
+      var p=MP.players[id];
+      return {id:p.id,name:p.name,color:p.color,aim:p.aim,ready:p.ready};
+    }),
+    round:round, results:results};
+}
+function mpApplySnapshot(s){
+  MP.phase=s.phase; MP.order=s.order||[];
+  MP.players={};
+  (s.players||[]).forEach(function(p){ MP.players[p.id]=p; });
+  round=s.round||[]; results=s.results||[];
+  renderAims(); renderRound(); mpRenderLobby();
+}
+function mpPushState(){ if(MP.host){ mpBroadcast(mpSnapshot()); } }
+
+/* ---------- 방 만들기 / 입장 ---------- */
+function mpCode(){
+  var C="ABCDEFGHJKLMNPQRSTUVWXYZ23456789", s="", i;
+  for(i=0;i<4;i++) s+=C.charAt(Math.floor(Math.random()*C.length));
+  return s;
+}
+function mpNeedLib(){
+  if(typeof Peer==="undefined"){
+    mpStatus("연결 라이브러리를 불러오지 못했습니다. 새로고침해 주세요.");
+    return true;
+  }
+  return false;
+}
+function mpHostRoom(){
+  if(mpNeedLib()) return;
+  var code=mpCode();
+  mpStatus("방 여는 중…");
+  var peer=new Peer("dartkr-"+code, {debug:0});
+  peer.on("open", function(id){
+    MP.on=true; MP.host=true; MP.code=code; MP.peer=peer; MP.myId=id;
+    MP.players[id]={id:id, name:mpNameInput(), color:COLORS[0], aim:null, ready:false};
+    MP.order=[id];
+    MP.phase="aim";
+    round=[]; save(LS_ROUND, round);
+    mpRenderLobby(); renderAims(); renderRound();
+    mpStatus("");
   });
+  peer.on("connection", function(conn){
+    conn.on("open", function(){
+      MP.conns.push(conn);
+      conn.on("data", function(m){ mpHostRecv(conn,m); });
+      conn.on("close", function(){ mpDrop(conn); });
+      conn.on("error", function(){ mpDrop(conn); });
+    });
+  });
+  peer.on("error", function(e){
+    if(e && e.type==="unavailable-id"){ mpHostRoom(); return; }   /* 코드 충돌 — 다시 */
+    mpStatus("연결 실패: "+((e&&e.type)||"알 수 없음"));
+  });
+}
+function mpJoinRoom(code){
+  if(mpNeedLib()) return;
+  code=(code||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(code.length!==4){ mpStatus("방 코드는 네 글자입니다."); return; }
+  mpStatus("입장 중…");
+  var peer=new Peer(null,{debug:0});
+  peer.on("open", function(id){
+    MP.peer=peer; MP.myId=id;
+    var conn=peer.connect("dartkr-"+code, {reliable:true});
+    conn.on("open", function(){
+      MP.on=true; MP.host=false; MP.code=code; MP.conns=[conn];
+      mpSend(conn,{t:"join", name:mpNameInput()});
+      mpStatus("");
+    });
+    conn.on("data", function(m){ mpGuestRecv(m); });
+    conn.on("close", function(){ mpStatus("방과 연결이 끊겼습니다."); mpLeave(); });
+    conn.on("error", function(){ mpStatus("방을 찾지 못했습니다. 코드를 확인하세요."); });
+    setTimeout(function(){ if(!MP.on) mpStatus("방을 찾지 못했습니다. 코드를 확인하세요."); }, 9000);
+  });
+  peer.on("error", function(e){
+    mpStatus("연결 실패: "+((e&&e.type)||"알 수 없음"));
+  });
+}
+function mpLeave(){
+  try{ if(MP.peer) MP.peer.destroy(); }catch(e){}
+  MP.on=false; MP.host=false; MP.code=""; MP.peer=null; MP.conns=[];
+  MP.players={}; MP.order=[]; MP.phase="lobby";
+  renderAims(); mpRenderLobby();
+}
+function mpDrop(conn){
+  var i=MP.conns.indexOf(conn);
+  if(i>=0) MP.conns.splice(i,1);
+  if(conn.peer && MP.players[conn.peer]){
+    delete MP.players[conn.peer];
+    MP.order=MP.order.filter(function(id){ return id!==conn.peer; });
+  }
+  mpRenderLobby(); renderAims(); mpPushState();
+}
+
+/* ---------- 메시지 ---------- */
+function mpHostRecv(conn,m){
+  if(!m || !m.t) return;
+  if(m.t==="join"){
+    var color=COLORS[MP.order.length % COLORS.length];
+    MP.players[conn.peer]={id:conn.peer, name:String(m.name||"손님").slice(0,8), color:color, aim:null, ready:false};
+    MP.order.push(conn.peer);
+    mpRenderLobby(); renderAims(); mpPushState();
+    return;
+  }
+  var p=MP.players[conn.peer];
+  if(!p) return;
+  if(m.t==="aim" && MP.phase==="aim"){
+    p.aim={x:m.x, y:m.y}; p.ready=true;
+    mpRenderLobby(); renderAims(); mpPushState();
+  }
+}
+function mpGuestRecv(m){
+  if(!m || !m.t) return;
+  if(m.t==="state"){ mpApplySnapshot(m); return; }
+  if(m.t==="count"){ mpCountdown(m.n); return; }
+  if(m.t==="volley"){ mpPlayVolley(m.plans); return; }
+}
+
+/* ---------- 조준 ---------- */
+function mpSetAim(x,y){
+  var me=mpMe();
+  if(!me) return;
+  me.aim={x:x,y:y}; me.ready=true;
+  renderAims(); mpRenderLobby();
+  if(MP.host) mpPushState(); else mpToHost({t:"aim", x:x, y:y});
+}
+
+var gAims=el("g",{});
+function renderAims(){
+  gAims.innerHTML="";
+  if(!MP.on) return;
+  mpList().forEach(function(p,i){
+    if(!p.aim) return;
+    var g=el("g",{transform:"translate("+p.aim.x.toFixed(1)+","+p.aim.y.toFixed(1)+")"});
+    g.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"none",stroke:p.color,"stroke-width":2,"stroke-opacity":.9}));
+    g.appendChild(el("circle",{cx:0,cy:0,r:3.4,fill:p.color}));
+    var t=el("text",{x:14,y:5,fill:p.color,"font-size":14,"font-weight":"700",
+      "font-family":"IBM Plex Sans KR, sans-serif","paint-order":"stroke",
+      stroke:"#DFE4DC","stroke-width":3.4,"stroke-linejoin":"round"});
+    t.textContent=p.name;
+    g.appendChild(t);
+    gAims.appendChild(g);
+  });
+}
+
+/* ---------- 동시 발사 ---------- */
+function mpStartVolley(){
+  if(!MP.host || MP.phase!=="aim") return;
+  var ready=mpList().filter(function(p){ return p.ready && p.aim; });
+  if(!ready.length) return;
+  MP.phase="count"; mpRenderLobby(); mpPushState();
+  var n=3;
+  mpBroadcast({t:"count", n:n});
+  mpCountdown(n, function(){
+    var plans=ready.map(function(p){
+      var plan=planThrow(p.aim.x, p.aim.y, false);
+      return {id:p.id, name:p.name, color:p.color,
+              segs:plan.segs, n:plan.n, baseX:plan.baseX, baseY:plan.baseY,
+              landX:plan.landX, landY:plan.landY, driftX:plan.driftX, driftY:plan.driftY,
+              shifts:plan.shifts, maxSpd:plan.maxSpd, km:plan.km, note:plan.note};
+    });
+    MP.phase="fly"; mpRenderLobby();
+    mpBroadcast({t:"volley", plans:plans});
+    mpPlayVolley(plans);
+  });
+}
+function mpCountdown(n, done){
+  MP.phase="count"; mpRenderLobby();
+  var i=n;
+  (function step(){
+    if(i<=0){
+      gustEl.textContent="던져!";
+      gustEl.classList.remove("show"); void gustEl.offsetWidth; gustEl.classList.add("show");
+      if(done) setTimeout(done, 420);
+      return;
+    }
+    gustEl.textContent=String(i);
+    gustEl.classList.remove("show"); void gustEl.offsetWidth; gustEl.classList.add("show");
+    i--;
+    setTimeout(step, 800);
+  })();
+}
+
+/* 모든 다트가 한꺼번에 날아가고, 카메라는 판 전체를 잡았다가 중심으로 조인다 */
+function mpPlayVolley(plans){
+  if(busy) return;
+  busy=true;
+  MP.phase="fly";
+  gRet.setAttribute("opacity","0");
+  gTrack.setAttribute("opacity","0");
+  gAims.innerHTML="";
+  stage.classList.add("away");
+  while(gFlight.firstChild) gFlight.removeChild(gFlight.firstChild);
+
+  var FLY=1700, ZOOM=900, HOLD=700;
+  var arts=plans.map(function(pl,i){
+    var d=makeDart();
+    d.querySelector("circle").setAttribute("fill", pl.color||"#E8402C");
+    gFlight.appendChild(d);
+    var line=el("polyline",{fill:"none",stroke:pl.color||"#E8402C","stroke-width":1.8,
+      "stroke-opacity":".45","vector-effect":"non-scaling-stroke"});
+    gFlight.appendChild(line);
+    return {d:d, line:line, pts:[],
+      S:{x:300+i*180, y:SH+120},                       /* 나란히 서서 동시에 던진다 */
+      B:{x:sx(pl.baseX), y:sy(pl.baseY)},
+      E:{x:sx(pl.landX), y:sy(pl.landY)}, pl:pl};
+  });
+
+  cam.style.animation="none";
+  gHand.style.opacity="0";
+  heldDart.style.opacity="0";
+
+  var t0=null, curSeg=-1;
+  function tick(now){
+    if(t0===null) t0=now;
+    var ms=now-t0, t=Math.min(1, ms/FLY);
+
+    /* 대표 바람(1번 계획)으로 HUD를 갱신한다 */
+    var lead=plans[0];
+    var si=Math.min(lead.n-1, Math.floor(t*lead.n));
+    if(si!==curSeg){ curSeg=si; applyWind(lead.segs[si].w); if(si>0) flashGust(lead.segs[si].w); }
+
+    arts.forEach(function(a){
+      var pl=a.pl, i2=Math.min(pl.n-1, Math.floor(t*pl.n)), local=Math.min(1, t*pl.n-i2), j, ax=0, ay=0;
+      for(j=0;j<i2;j++){ ax+=pl.segs[j].e.x; ay+=pl.segs[j].e.y; }
+      ax+=pl.segs[i2].e.x*local; ay+=pl.segs[i2].e.y*local;
+      ax/=pl.n; ay/=pl.n;
+      var u=easeOut3(t);
+      var px2=a.S.x+(a.B.x-a.S.x)*u+(a.E.x-a.B.x)*t+ax*MS;
+      var py2=a.S.y+(a.B.y-a.S.y)*u+(a.E.y-a.B.y)*t+ay*MS-190*Math.sin(Math.PI*t);
+      var sc=3.2+(STUCK-3.2)*u;
+      a.d.setAttribute("transform","translate("+px2.toFixed(1)+","+py2.toFixed(1)+") rotate("+(60*(1-u)).toFixed(1)+") scale("+sc.toFixed(3)+")");
+      a.pts.push(px2.toFixed(0)+","+py2.toFixed(0));
+      if(a.pts.length>200) a.pts.shift();
+      a.line.setAttribute("points", a.pts.join(" "));
+    });
+
+    setCam(640, 352, 1.02);
+    coordEl.textContent="VOLLEY  "+plans.length+" DARTS";
+    if(t<1){ requestAnimationFrame(tick); return; }
+
+    arts.forEach(function(a){
+      a.d.setAttribute("data-stuck","1");
+      a.d.setAttribute("transform","translate("+a.E.x.toFixed(1)+","+a.E.y.toFixed(1)+") rotate(0) scale("+STUCK+")");
+    });
+    round=plans.map(function(pl){
+      var lon=toLon(pl.landX), lat=toLat(pl.landY);
+      var ins=Math.sqrt((pl.landX-INSET.cx)*(pl.landX-INSET.cx)+(pl.landY-INSET.cy)*(pl.landY-INSET.cy))<=INSET.r+2.5;
+      return {x:pl.landX, y:pl.landY, t:Date.now(), sea:(!ins && !onLand(lon,lat)), inset:ins,
+              name:pl.name, color:pl.color};
+    });
+    save(LS_ROUND, round);
+    usedWind={shifts:lead.shifts, maxSpd:lead.maxSpd, km:lead.km, note:lead.note};
+    renderRound();
+    setTimeout(zoomCenter, HOLD);
+  }
+
+  function zoomCenter(){
+    var c=centroid(), cx=sx(c.x), cy=sy(c.y), t1=null;
+    function z(now){
+      if(t1===null) t1=now;
+      var u=Math.min(1,(now-t1)/ZOOM), e=easeInOut3(u);
+      setCam(640+(cx-640)*e, 352+(cy-352)*e, 1.02+1.5*e);
+      arts.forEach(function(a){ a.line.setAttribute("stroke-opacity", (0.45*(1-e)).toFixed(2)); });
+      if(u<1){ requestAnimationFrame(z); return; }
+      setTimeout(function(){
+        var t2=null;
+        function back(now2){
+          if(t2===null) t2=now2;
+          var v=Math.min(1,(now2-t2)/700), e2=easeInOut3(v);
+          setCam(cx+(640-cx)*e2, cy+(352-cy)*e2, 2.52+(1-2.52)*e2);
+          if(v<1){ requestAnimationFrame(back); return; }
+          cam.style.transform=""; cam.style.animation="";
+          gHand.style.opacity="1"; heldDart.style.opacity="1";
+          arts.forEach(function(a){ if(a.line.parentNode) a.line.parentNode.removeChild(a.line); });
+          stage.classList.remove("away");
+          MP.phase="result";
+          mpList().forEach(function(p){ p.ready=false; p.aim=null; });
+          renderAims(); mpRenderLobby(); mpPushState();
+          busy=false;
+        }
+        requestAnimationFrame(back);
+      }, 900);
+    }
+    requestAnimationFrame(z);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 로비 UI ---------- */
+function mpNameInput(){
+  var v=(nameEl.value||"").trim();
+  return v ? v.slice(0,8) : "손님";
+}
+function mpStatus(s){ mpStatusEl.textContent=s||""; }
+function mpRenderLobby(){
+  if(!MP.on){
+    lobbyEl.className="lobby";
+    lobbyEl.innerHTML='';
+    joinBoxEl.style.display="";
+    roomBoxEl.style.display="none";
+    return;
+  }
+  joinBoxEl.style.display="none";
+  roomBoxEl.style.display="";
+  codeEl.textContent=MP.code;
+  var list=mpList();
+  lobbyEl.innerHTML=list.map(function(p){
+    return '<span class="pl'+(p.ready?" rdy":"")+'" style="--c:'+p.color+'">'+
+           '<i></i>'+esc(p.name)+(p.id===MP.myId?" (나)":"")+'</span>';
+  }).join("");
+  var ready=mpReadyCount(), total=list.length;
+  var msg;
+  if(MP.phase==="count") msg="곧 던집니다";
+  else if(MP.phase==="fly") msg="날아가는 중";
+  else if(MP.phase==="result") msg=MP.host?"«새 판»으로 다시":"결과 확인";
+  else msg="조준 "+ready+" / "+total;
+  phaseEl.textContent=msg;
+  fireBtn.style.display = (MP.host && MP.phase==="aim" && ready>0) ? "" : "none";
+  fireBtn.textContent = "동시에 던지기 ("+ready+")";
 }
 
 /* ===== 입력 =====
@@ -1249,7 +1743,12 @@ function aimHand(p){
 
 hitAll.addEventListener("click", function(ev){
   var p=boardPoint(ev);
-  if(onBoard(p)) throwDart(p.x, p.y, false);
+  if(!onBoard(p)) return;
+  if(MP.on){
+    if(MP.phase==="aim") mpSetAim(p.x, p.y);   /* 멀티: 클릭은 조준, 발사는 호스트가 */
+    return;
+  }
+  throwDart(p.x, p.y, false);
 });
 function onAimMove(ev){
   if(busy) return;
@@ -1274,35 +1773,47 @@ hitAll.addEventListener("pointerleave", function(){
   aimHand(null);
   scene.style.cursor="default";
 });
+document.getElementById("newRound").addEventListener("click", function(){
+  if(busy) return;
+  newRound();
+  if(MP.on){
+    MP.phase="aim";
+    mpList().forEach(function(p){ p.ready=false; p.aim=null; });
+    renderAims(); mpRenderLobby(); mpPushState();
+  }
+});
+document.getElementById("hostBtn").addEventListener("click", mpHostRoom);
+document.getElementById("joinBtn").addEventListener("click", function(){ mpJoinRoom(codeInEl.value); });
+codeInEl.addEventListener("keydown", function(e){ if(e.key==="Enter") mpJoinRoom(codeInEl.value); });
+document.getElementById("leaveBtn").addEventListener("click", mpLeave);
+fireBtn.addEventListener("click", mpStartVolley);
 scene.addEventListener("keydown", function(ev){
   if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); throwDart(0,0,true); }
 });
 
-/* ===== 첫 화면: 이미 한 번 던져둔 상태로 연다 ===== */
+board.appendChild(gAims);      /* 각자의 조준점은 지도 위에 */
+mpRenderLobby();
+
+/* ===== 첫 화면: 한 명이 이미 던져둔 상태로 연다 ===== */
 rollWind();
 scheduleWind();
-(function firstThrow(){
-  var rec, dest;
-  if(log.length){
-    rec = log[0];
-    dest = DESTS.filter(function(o){ return o.name===rec.place; })[0];
+(function seed(){
+  if(!round.length){
+    var p=randomLandPoint();
+    round.push({x:p.x, y:p.y, t:Date.now(), sea:false, inset:false});
+    save(LS_ROUND, round);
+    var dr=windDrift(wind), mg=Math.sqrt(dr.x*dr.x+dr.y*dr.y);
+    usedWind={shifts:1, maxSpd:wind.spd, km:mg*1.11,
+              note: mg<11 ? "\uace7\uac8c" : (mg>32 ? "\ud718\uc5b4" : "\ubc00\ub9bc")};
   }
-  if(!dest){
-    var p = randomLandPoint();
-    dest = nearest(toLon(p.x), toLat(p.y), []);
-    rec = {n:log.length+1, who:"", place:dest.name, region:dest.region, x:p.x, y:p.y, t:Date.now()};
-    log.unshift(rec);
-    save(LS_LOG, log);
+  renderRound();
+  var last=round[round.length-1];          /* 마지막으로 꽂힌 다트만 입체로 남긴다 */
+  if(last){
+    var stuck=makeDart();
+    stuck.setAttribute("data-stuck","1");
+    stuck.setAttribute("transform","translate("+sx(last.x)+","+sy(last.y)+") rotate(0) scale("+STUCK+")");
+    gFlight.appendChild(stuck);
   }
-  renderPast(); setBottom();
-  var dr=windDrift(wind), mg=Math.sqrt(dr.x*dr.x+dr.y*dr.y);
-  usedWind={shifts:1, maxSpd:wind.spd, km:mg*1.11,
-            note: mg<11 ? "곧게" : (mg>32 ? "휘어" : "밀림")};
-  renderHit(dest, hav(toLat(rec.y), toLon(rec.x), dest.lat, dest.lon), rec);
-  var stuck = makeDart();
-  stuck.setAttribute("data-stuck","1");
-  stuck.setAttribute("transform","translate("+sx(rec.x)+","+sy(rec.y)+") rotate(0) scale("+STUCK+")");
-  gFlight.appendChild(stuck);
 })();
 })();
 </script>
