@@ -297,7 +297,7 @@ body{
 var SW=1280, SH=720;
 var MAP_X=508, MAP_Y=87, MS=0.62;              /* 지도판 위치·축척 — 벌판 저 앞에 세워져 있다 */
 var STUCK=0.85;                                /* 판에 꽂힌 다트는 거리 대비 조금 크게 그린다 */
-var DART_TIP={x:905, y:375}, DART_SCALE=5, DART_ROT=60;   /* 손에 쥔 다트 */
+var DART_TIP={x:900, y:364}, DART_SCALE=4.4, DART_ROT=60;   /* 손에 쥔 다트 */
 
 /* ===== 투영: 위경도 → 지도 좌표 ===== */
 var K = Math.cos(36.4*Math.PI/180), LON0 = 125.95, LAT1 = 38.75, S = 100;
@@ -674,13 +674,11 @@ var sockGroup = el("g",{});
 var gWindFx = el("g",{});
 cam.appendChild(gWindFx);
 
-/* --- 오른손: 납작한 셀 채색에 굵은 윤곽선 (애니메이션 그림체) --- */
-var OUT="#2E2A2E", SKIN="#F7DCC0", SKIN_SH="#E0B491",
-    SLEEVE="#5FAAC9", SLEEVE_SH="#4789A8", CUFF="#EAF2F5";
+/* --- 오른손: 손가락 없는 하얀 공 (도라에몽 손) --- */
+var OUT="#4A4744", BLUE="#59A4C9", BLUE_SH="#4386AA", BALL="#F2F2EF", BALL_SH="#D7D7D1";
 
-var ARM_A={x:1344,y:762}, ARM_C={x:1198,y:606}, ARM_B={x:1046,y:452};
-var FIST={cx:1006,cy:412,rx:84,ry:71,rot:-32};
-var THUMB={cx:944,cy:386,rx:38,ry:23,rot:-36};
+var ARM_A={x:1352,y:774}, ARM_B={x:1082,y:476};
+var BALL_C={cx:1006,cy:418,r:80};
 
 /* 두 점을 잇는, 끝 굵기가 다른 사다리꼴 */
 function limbPath(A,B,wA,wB){
@@ -691,7 +689,7 @@ function limbPath(A,B,wA,wB){
         " L"+(B.x-px*wB).toFixed(1)+" "+(B.y-py*wB).toFixed(1)+
         " L"+(A.x-px*wA).toFixed(1)+" "+(A.y-py*wA).toFixed(1)+" Z";
 }
-/* 팔 축의 왼쪽 아래를 덮는 반평면 — 셀 그림자 한 덩어리 */
+/* 팔 축의 왼쪽 아래를 덮는 반평면 — 그라데이션 없이 셀 그림자 한 단계 */
 function shadeHalf(A,B,off){
   var dx=B.x-A.x, dy=B.y-A.y, L=Math.sqrt(dx*dx+dy*dy);
   var ux=dx/L, uy=dy/L, px=-uy, py=ux, ext=700, far=900;
@@ -703,73 +701,50 @@ function shadeHalf(A,B,off){
         " L"+(a.x-px*far).toFixed(1)+" "+(a.y-py*far).toFixed(1)+" Z";
 }
 
-var SLEEVE_Q=limbPath(ARM_A,ARM_C,78,68);
-var WRIST_Q =limbPath(ARM_C,ARM_B,63,57);
-var SHADE   =shadeHalf(ARM_A,ARM_B,14);
-function fistEl(r,fill){
-  return el("ellipse",{cx:FIST.cx,cy:FIST.cy,rx:FIST.rx+r,ry:FIST.ry+r,fill:fill,
-    transform:"rotate("+FIST.rot+" "+FIST.cx+" "+FIST.cy+")"});
-}
-function thumbEl(r,fill){
-  return el("ellipse",{cx:THUMB.cx,cy:THUMB.cy,rx:THUMB.rx+r,ry:THUMB.ry+r,fill:fill,
-    transform:"rotate("+THUMB.rot+" "+THUMB.cx+" "+THUMB.cy+")"});
-}
+var ARM_Q=limbPath(ARM_A,ARM_B,60,45);
+var SHADE=shadeHalf(ARM_A,{x:BALL_C.cx,y:BALL_C.cy},16);
+function ballEl(r,fill){ return el("circle",{cx:BALL_C.cx,cy:BALL_C.cy,r:BALL_C.r+r,fill:fill}); }
 
 var gHand = el("g",{id:"hand"});
 
-/* 클리핑 — 그림자가 손 밖으로 새지 않게 */
+/* 그림자가 손 밖으로 새지 않게 잘라낸다 */
 var handDefs=el("defs",{});
-var clipSleeve=el("clipPath",{id:"clipSleeve"});
-clipSleeve.appendChild(el("path",{d:SLEEVE_Q}));
-var clipSkin=el("clipPath",{id:"clipSkin"});
-clipSkin.appendChild(el("path",{d:WRIST_Q}));
-clipSkin.appendChild(fistEl(0,"#000"));
-clipSkin.appendChild(thumbEl(0,"#000"));
-handDefs.appendChild(clipSleeve); handDefs.appendChild(clipSkin);
+var clipArm=el("clipPath",{id:"clipArm"});
+clipArm.appendChild(el("path",{d:ARM_Q}));
+var clipBall=el("clipPath",{id:"clipBall"});
+clipBall.appendChild(ballEl(0,"#000"));
+handDefs.appendChild(clipArm); handDefs.appendChild(clipBall);
 gHand.appendChild(handDefs);
 
 /* 1) 윤곽을 먼저 전부 깔고 */
-[el("path",{d:SLEEVE_Q}), el("path",{d:WRIST_Q}), fistEl(0,OUT), thumbEl(0,OUT)]
-  .forEach(function(n){
-    n.setAttribute("fill",OUT);
-    n.setAttribute("stroke",OUT);
-    n.setAttribute("stroke-width","10");
-    n.setAttribute("stroke-linejoin","round");
-    gHand.appendChild(n);
-  });
+[el("path",{d:ARM_Q}), ballEl(0,OUT)].forEach(function(n){
+  n.setAttribute("fill",OUT);
+  n.setAttribute("stroke",OUT);
+  n.setAttribute("stroke-width","11");
+  n.setAttribute("stroke-linejoin","round");
+  gHand.appendChild(n);
+});
 
-/* 2) 색을 위에 덮으면 안쪽 선은 지워지고 바깥 테두리만 남는다 */
-gHand.appendChild(el("path",{d:SLEEVE_Q,fill:SLEEVE}));
-gHand.appendChild(el("path",{d:WRIST_Q,fill:SKIN}));
-gHand.appendChild(thumbEl(0,SKIN));
-gHand.appendChild(fistEl(0,SKIN));
+/* 2) 색을 덮으면 안쪽 선은 지워지고 바깥 테두리만 남는다 */
+gHand.appendChild(el("path",{d:ARM_Q,fill:BLUE}));
+gHand.appendChild(ballEl(0,BALL));
 
-/* 3) 셀 그림자 한 덩어리 */
-var shSleeve=el("g",{"clip-path":"url(#clipSleeve)"});
-shSleeve.appendChild(el("path",{d:SHADE,fill:SLEEVE_SH}));
-gHand.appendChild(shSleeve);
-var shSkin=el("g",{"clip-path":"url(#clipSkin)"});
-shSkin.appendChild(el("path",{d:SHADE,fill:SKIN_SH}));
-gHand.appendChild(shSkin);
+/* 3) 셀 그림자 */
+var shArm=el("g",{"clip-path":"url(#clipArm)"});
+shArm.appendChild(el("path",{d:SHADE,fill:BLUE_SH}));
+gHand.appendChild(shArm);
+var shBall=el("g",{"clip-path":"url(#clipBall)"});
+shBall.appendChild(el("path",{d:SHADE,fill:BALL_SH}));
+gHand.appendChild(shBall);
 
-/* 4) 소맷부리 */
-gHand.appendChild(el("path",{d:limbPath(ARM_C,{x:ARM_C.x-13,y:ARM_C.y-13},70,66),
-  fill:CUFF,stroke:OUT,"stroke-width":5,"stroke-linejoin":"round"}));
+/* 4) 공 위쪽 하이라이트 한 점 */
+gHand.appendChild(el("ellipse",{cx:BALL_C.cx-24,cy:BALL_C.cy-34,rx:20,ry:13,
+  fill:"#FFFFFF","fill-opacity":.75,transform:"rotate(-28 "+(BALL_C.cx-24)+" "+(BALL_C.cy-34)+")"}));
 
+/* 5) 다트는 공에 딱 붙어 있다 — 도라에몽 손은 쥐는 게 아니라 붙는다 */
 var heldDart = makeDart();
 heldDart.setAttribute("transform","translate("+DART_TIP.x+","+DART_TIP.y+") rotate("+DART_ROT+") scale("+DART_SCALE+")");
 gHand.appendChild(heldDart);
-
-/* 5) 다트를 감싼 손가락 — 선 몇 개면 충분하다 */
-[["M980 356 Q962 390 982 424"],
- ["M1016 374 Q998 408 1018 442"],
- ["M1050 394 Q1032 428 1052 462"]].forEach(function(p){
-  gHand.appendChild(el("path",{d:p[0],fill:"none",stroke:OUT,"stroke-width":4.5,
-    "stroke-linecap":"round"}));
-});
-/* 엄지 접힌 선 */
-gHand.appendChild(el("path",{d:"M930 372 Q946 384 938 402",fill:"none",stroke:OUT,
-  "stroke-width":4,"stroke-linecap":"round"}));
 
 cam.appendChild(gHand);
 
