@@ -686,6 +686,7 @@ var joinBoxEl=document.getElementById("joinBox");
 var roomBoxEl=document.getElementById("roomBox");
 var mpStatusEl=document.getElementById("netStatus");
 var fireBtn=document.getElementById("fireBtn");
+var newBtn=document.getElementById("newRound");
 var busy=false, usedWind=null;
 var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -1694,10 +1695,11 @@ function mpNameInput(){
 function mpStatus(s){ mpStatusEl.textContent=s||""; }
 function mpRenderLobby(){
   if(!MP.on){
-    lobbyEl.className="lobby";
     lobbyEl.innerHTML='';
     joinBoxEl.style.display="";
     roomBoxEl.style.display="none";
+    newBtn.style.display="";
+    fireBtn.style.display="none";
     return;
   }
   joinBoxEl.style.display="none";
@@ -1716,6 +1718,7 @@ function mpRenderLobby(){
   else msg="조준 "+ready+" / "+total;
   phaseEl.textContent=msg;
   fireBtn.style.display = (MP.host && MP.phase==="aim" && ready>0) ? "" : "none";
+  newBtn.style.display = MP.host ? "" : "none";
   fireBtn.textContent = "동시에 던지기 ("+ready+")";
 }
 
@@ -1775,6 +1778,7 @@ hitAll.addEventListener("pointerleave", function(){
 });
 document.getElementById("newRound").addEventListener("click", function(){
   if(busy) return;
+  if(MP.on && !MP.host) return;          /* 판을 비우는 건 방장만 */
   newRound();
   if(MP.on){
     MP.phase="aim";
