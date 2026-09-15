@@ -85,6 +85,29 @@ body{
 }
 .hud.tools button:hover{border-color:var(--lock); color:var(--lock)}
 .hud.tools button:focus-visible{outline:2px solid var(--lock); outline-offset:2px}
+.split{
+  position:absolute; inset:0; display:none; grid-auto-rows:1fr; gap:2px;
+  background:#050A08; z-index:6;
+}
+.split .pane{position:relative; overflow:hidden; background:#0A100E; min-width:0; min-height:0}
+.split .pane svg{position:absolute; inset:0; width:100%; height:100%}
+.split .ptag{
+  position:absolute; top:7px; left:8px; z-index:2; color:var(--c);
+  font-family:"IBM Plex Sans KR",sans-serif; font-weight:700; font-size:13px;
+  letter-spacing:.02em; text-shadow:0 1px 4px rgba(0,0,0,.9); pointer-events:none;
+}
+.waiting{
+  position:absolute; inset:0; z-index:7; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:9px; pointer-events:none;
+  background:rgba(5,10,8,.62); text-align:center; padding-inline:20px;
+}
+.waiting b{
+  font-family:"IBM Plex Sans KR",sans-serif; font-weight:700;
+  font-size:clamp(15px,2.2vw,22px); color:var(--hud); letter-spacing:.02em;
+}
+.waiting span{
+  font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--lock); letter-spacing:.2em;
+}
 .hud.net{
   top:72px; right:18px; width:272px; display:flex; flex-direction:column;
   align-items:flex-end; gap:7px;
@@ -210,7 +233,7 @@ body{
 <div class="shell">
   <div class="topbar">
     <h1 class="wordmark">전국 <em>다트</em> 여행</h1>
-    <span class="topnote">방을 만들어 함께 조준하고 동시에 던지세요 · 꽂힌 점들의 중심이 여행지가 됩니다</span>
+    <span class="topnote">모이면 방장이 시작 · 각자 한 번씩 던지고 · 다 던지면 함께 보고 · 중심이 여행지</span>
   </div>
 
   <div class="stagewrap">
@@ -227,13 +250,18 @@ body{
         <span id="windHud">WIND --</span>
         <span class="meter" id="meterHud"></span>
       </div>
+      <div class="split" id="split"></div>
+      <div class="waiting" id="waitBox" style="display:none">
+        <b>다른 멤버를 기다리는 중입니다</b>
+        <span id="waitCount"></span>
+      </div>
       <div class="fx cut" id="cut"></div>
       <div class="hud shot" id="shot"></div>
       <div class="hud gust" id="gust"></div>
       <div class="hud tools">
         <span id="throwCount">THROWS 00</span>
         <button id="newRound" type="button">새 판</button>
-        <button id="fireBtn" type="button" class="fire" style="display:none">동시에 던지기</button>
+        <button id="startBtn" type="button" class="fire" style="display:none">시작하기</button>
       </div>
       <div class="hud net">
         <div id="joinBox" class="netrow">
@@ -687,8 +715,11 @@ var phaseEl=document.getElementById("phaseMsg");
 var joinBoxEl=document.getElementById("joinBox");
 var roomBoxEl=document.getElementById("roomBox");
 var mpStatusEl=document.getElementById("netStatus");
-var fireBtn=document.getElementById("fireBtn");
+var startBtn=document.getElementById("startBtn");
 var newBtn=document.getElementById("newRound");
+var splitEl=document.getElementById("split");
+var waitEl=document.getElementById("waitBox");
+var waitCountEl=document.getElementById("waitCount");
 var busy=false, usedWind=null;
 var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -1378,21 +1409,23 @@ function newRound(){
 }
 
 /* ===== 멀티플레이 (PeerJS 공개 브로커) =====
-   호스트가 방을 열고 모두의 상태를 들고 있는다. 손님은 조준만 보내고,
-   발사·바람·착지 계산은 전부 호스트가 해서 뿌리므로 모든 화면이 똑같이 보인다.
-   연결이 안 되면 그냥 1인용으로 동작한다. */
+   방장이 방을 열고 모두 모이면 «시작하기»를 누른다. 그때부터 각자 자기 속도로 던지고,
+   던진 사람은 나머지를 기다린다. 전원이 던지면 인원수만큼 화면을 쪼개
+   모두의 비행을 한꺼번에 보여준 뒤, 꽂힌 점들의 중심으로 여행지가 정해진다.
+   계산은 전부 방장이 하므로 모든 화면이 같은 결과를 본다. */
 
 var COLORS=["#E8402C","#4BE07A","#E0AC4E","#5AA9E6","#C77DD6","#57D4C4"];
 var MP={
   on:false, host:false, code:"", peer:null, conns:[], myId:"",
-  players:{},            /* id -> {id,name,color,aim,ready} */
-  phase:"lobby",         /* lobby | aim | count | fly | result */
+  players:{},            /* id -> {id,name,color,thrown,plan} */
+  phase:"lobby",         /* lobby | throw | replay | result */
   order:[]
 };
 
 function mpMe(){ return MP.players[MP.myId]; }
 function mpList(){ return MP.order.map(function(id){ return MP.players[id]; }).filter(Boolean); }
-function mpReadyCount(){ return mpList().filter(function(p){ return p.ready; }).length; }
+function mpThrownCount(){ return mpList().filter(function(p){ return p.thrown; }).length; }
+function mpAllThrown(){ var l=mpList(); return l.length>0 && l.every(function(p){ return p.thrown; }); }
 
 function mpSend(conn,msg){ try{ conn.send(msg); }catch(e){} }
 function mpBroadcast(msg){ MP.conns.forEach(function(c){ mpSend(c,msg); }); }
@@ -1402,18 +1435,21 @@ function mpSnapshot(){
   return {t:"state", phase:MP.phase, order:MP.order,
     players:MP.order.map(function(id){
       var p=MP.players[id];
-      return {id:p.id,name:p.name,color:p.color,aim:p.aim,ready:p.ready};
+      return {id:p.id,name:p.name,color:p.color,thrown:!!p.thrown};
     }),
     round:round, results:results};
 }
 function mpApplySnapshot(s){
   MP.phase=s.phase; MP.order=s.order||[];
-  MP.players={};
-  (s.players||[]).forEach(function(p){ MP.players[p.id]=p; });
+  var keep=MP.players; MP.players={};
+  (s.players||[]).forEach(function(p){
+    var old=keep[p.id];
+    MP.players[p.id]={id:p.id,name:p.name,color:p.color,thrown:p.thrown,plan:old&&old.plan};
+  });
   round=s.round||[]; results=s.results||[];
-  renderAims(); renderRound(); mpRenderLobby();
+  renderRound(); mpRenderLobby();
 }
-function mpPushState(){ if(MP.host){ mpBroadcast(mpSnapshot()); } }
+function mpPushState(){ if(MP.host) mpBroadcast(mpSnapshot()); }
 
 /* ---------- 방 만들기 / 입장 ---------- */
 function mpCode(){
@@ -1422,10 +1458,7 @@ function mpCode(){
   return s;
 }
 function mpNeedLib(){
-  if(typeof Peer==="undefined"){
-    mpStatus("연결 라이브러리를 불러오지 못했습니다. 새로고침해 주세요.");
-    return true;
-  }
+  if(typeof Peer==="undefined"){ mpStatus("연결 라이브러리를 불러오지 못했습니다. 새로고침해 주세요."); return true; }
   return false;
 }
 function mpHostRoom(){
@@ -1435,12 +1468,10 @@ function mpHostRoom(){
   var peer=new Peer("dartkr-"+code, {debug:0});
   peer.on("open", function(id){
     MP.on=true; MP.host=true; MP.code=code; MP.peer=peer; MP.myId=id;
-    MP.players[id]={id:id, name:mpNameInput(), color:COLORS[0], aim:null, ready:false};
-    MP.order=[id];
-    MP.phase="aim";
+    MP.players[id]={id:id, name:mpNameInput(), color:COLORS[0], thrown:false, plan:null};
+    MP.order=[id]; MP.phase="lobby";
     round=[]; save(LS_ROUND, round);
-    mpRenderLobby(); renderAims(); renderRound();
-    mpStatus("");
+    mpRenderLobby(); renderRound(); mpStatus("");
   });
   peer.on("connection", function(conn){
     conn.on("open", function(){
@@ -1451,7 +1482,7 @@ function mpHostRoom(){
     });
   });
   peer.on("error", function(e){
-    if(e && e.type==="unavailable-id"){ mpHostRoom(); return; }   /* 코드 충돌 — 다시 */
+    if(e && e.type==="unavailable-id"){ mpHostRoom(); return; }
     mpStatus("연결 실패: "+((e&&e.type)||"알 수 없음"));
   });
 }
@@ -1474,15 +1505,13 @@ function mpJoinRoom(code){
     conn.on("error", function(){ mpStatus("방을 찾지 못했습니다. 코드를 확인하세요."); });
     setTimeout(function(){ if(!MP.on) mpStatus("방을 찾지 못했습니다. 코드를 확인하세요."); }, 9000);
   });
-  peer.on("error", function(e){
-    mpStatus("연결 실패: "+((e&&e.type)||"알 수 없음"));
-  });
+  peer.on("error", function(e){ mpStatus("연결 실패: "+((e&&e.type)||"알 수 없음")); });
 }
 function mpLeave(){
   try{ if(MP.peer) MP.peer.destroy(); }catch(e){}
   MP.on=false; MP.host=false; MP.code=""; MP.peer=null; MP.conns=[];
   MP.players={}; MP.order=[]; MP.phase="lobby";
-  renderAims(); mpRenderLobby();
+  mpRenderLobby();
 }
 function mpDrop(conn){
   var i=MP.conns.indexOf(conn);
@@ -1491,7 +1520,8 @@ function mpDrop(conn){
     delete MP.players[conn.peer];
     MP.order=MP.order.filter(function(id){ return id!==conn.peer; });
   }
-  mpRenderLobby(); renderAims(); mpPushState();
+  mpRenderLobby(); mpPushState();
+  if(MP.host && MP.phase==="throw" && mpAllThrown()) mpFireReplay();
 }
 
 /* ---------- 메시지 ---------- */
@@ -1499,152 +1529,146 @@ function mpHostRecv(conn,m){
   if(!m || !m.t) return;
   if(m.t==="join"){
     var color=COLORS[MP.order.length % COLORS.length];
-    MP.players[conn.peer]={id:conn.peer, name:String(m.name||"손님").slice(0,8), color:color, aim:null, ready:false};
+    MP.players[conn.peer]={id:conn.peer, name:String(m.name||"손님").slice(0,8), color:color, thrown:false, plan:null};
     MP.order.push(conn.peer);
-    mpRenderLobby(); renderAims(); mpPushState();
+    mpRenderLobby(); mpPushState();
     return;
   }
   var p=MP.players[conn.peer];
   if(!p) return;
-  if(m.t==="aim" && MP.phase==="aim"){
-    p.aim={x:m.x, y:m.y}; p.ready=true;
-    mpRenderLobby(); renderAims(); mpPushState();
+  if(m.t==="throw" && MP.phase==="throw" && !p.thrown){
+    mpRecordThrow(p, m.x, m.y);
   }
 }
 function mpGuestRecv(m){
   if(!m || !m.t) return;
   if(m.t==="state"){ mpApplySnapshot(m); return; }
-  if(m.t==="count"){ mpCountdown(m.n); return; }
-  if(m.t==="volley"){ mpPlayVolley(m.plans); return; }
+  if(m.t==="replay"){ mpRunReplay(m.plans); return; }
 }
 
-/* ---------- 조준 ---------- */
-function mpSetAim(x,y){
+/* ---------- 시작 / 던지기 ---------- */
+function mpStart(){
+  if(!MP.host || MP.phase!=="lobby") return;
+  MP.phase="throw";
+  mpList().forEach(function(p){ p.thrown=false; p.plan=null; });
+  round=[]; save(LS_ROUND, round);
+  while(gFlight.firstChild) gFlight.removeChild(gFlight.firstChild);
+  gTrack.setAttribute("opacity","0");
+  renderRound(); mpRenderLobby(); mpPushState();
+}
+function mpRecordThrow(p,x,y){
+  var plan=planThrow(x, y, false);
+  p.thrown=true;
+  p.plan={id:p.id, name:p.name, color:p.color,
+          segs:plan.segs, n:plan.n, baseX:plan.baseX, baseY:plan.baseY,
+          landX:plan.landX, landY:plan.landY, driftX:plan.driftX, driftY:plan.driftY,
+          shifts:plan.shifts, maxSpd:plan.maxSpd, km:plan.km, note:plan.note};
+  mpRenderLobby(); mpPushState();
+  if(mpAllThrown()) setTimeout(mpFireReplay, 500);
+}
+function mpThrow(x,y){
   var me=mpMe();
-  if(!me) return;
-  me.aim={x:x,y:y}; me.ready=true;
-  renderAims(); mpRenderLobby();
-  if(MP.host) mpPushState(); else mpToHost({t:"aim", x:x, y:y});
+  if(!me || MP.phase!=="throw" || me.thrown) return;
+  if(MP.host){ mpRecordThrow(me,x,y); }
+  else { me.thrown=true; mpRenderLobby(); mpToHost({t:"throw", x:x, y:y}); }
+}
+function mpFireReplay(){
+  if(!MP.host || MP.phase!=="throw") return;
+  var plans=mpList().map(function(p){ return p.plan; }).filter(Boolean);
+  if(!plans.length) return;
+  MP.phase="replay"; mpRenderLobby(); mpPushState();
+  mpBroadcast({t:"replay", plans:plans});
+  mpRunReplay(plans);
 }
 
-var gAims=el("g",{});
-function renderAims(){
-  gAims.innerHTML="";
-  if(!MP.on) return;
-  mpList().forEach(function(p,i){
-    if(!p.aim) return;
-    var g=el("g",{transform:"translate("+p.aim.x.toFixed(1)+","+p.aim.y.toFixed(1)+")"});
-    g.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"none",stroke:p.color,"stroke-width":2,"stroke-opacity":.9}));
-    g.appendChild(el("circle",{cx:0,cy:0,r:3.4,fill:p.color}));
-    var t=el("text",{x:14,y:5,fill:p.color,"font-size":14,"font-weight":"700",
-      "font-family":"IBM Plex Sans KR, sans-serif","paint-order":"stroke",
-      stroke:"#DFE4DC","stroke-width":3.4,"stroke-linejoin":"round"});
-    t.textContent=p.name;
-    g.appendChild(t);
-    gAims.appendChild(g);
-  });
-}
+/* ---------- 분할 화면 리플레이 ---------- */
+var boardSnapshot=null;                 /* 던지기 전 깨끗한 지도판 사본 */
+function mpMakeSnapshot(){ if(!boardSnapshot) boardSnapshot=board.cloneNode(true); }
 
-/* ---------- 동시 발사 ---------- */
-function mpStartVolley(){
-  if(!MP.host || MP.phase!=="aim") return;
-  var ready=mpList().filter(function(p){ return p.ready && p.aim; });
-  if(!ready.length) return;
-  MP.phase="count"; mpRenderLobby(); mpPushState();
-  var n=3;
-  mpBroadcast({t:"count", n:n});
-  mpCountdown(n, function(){
-    var plans=ready.map(function(p){
-      var plan=planThrow(p.aim.x, p.aim.y, false);
-      return {id:p.id, name:p.name, color:p.color,
-              segs:plan.segs, n:plan.n, baseX:plan.baseX, baseY:plan.baseY,
-              landX:plan.landX, landY:plan.landY, driftX:plan.driftX, driftY:plan.driftY,
-              shifts:plan.shifts, maxSpd:plan.maxSpd, km:plan.km, note:plan.note};
-    });
-    MP.phase="fly"; mpRenderLobby();
-    mpBroadcast({t:"volley", plans:plans});
-    mpPlayVolley(plans);
-  });
-}
-function mpCountdown(n, done){
-  MP.phase="count"; mpRenderLobby();
-  var i=n;
-  (function step(){
-    if(i<=0){
-      gustEl.textContent="던져!";
-      gustEl.classList.remove("show"); void gustEl.offsetWidth; gustEl.classList.add("show");
-      if(done) setTimeout(done, 420);
-      return;
-    }
-    gustEl.textContent=String(i);
-    gustEl.classList.remove("show"); void gustEl.offsetWidth; gustEl.classList.add("show");
-    i--;
-    setTimeout(step, 800);
-  })();
-}
-
-/* 모든 다트가 한꺼번에 날아가고, 카메라는 판 전체를 잡았다가 중심으로 조인다 */
-function mpPlayVolley(plans){
+function mpRunReplay(plans){
   if(busy) return;
   busy=true;
-  MP.phase="fly";
+  MP.phase="replay";
   gRet.setAttribute("opacity","0");
   gTrack.setAttribute("opacity","0");
-  gAims.innerHTML="";
   stage.classList.add("away");
-  while(gFlight.firstChild) gFlight.removeChild(gFlight.firstChild);
+  waitEl.style.display="none";
+  mpMakeSnapshot();
 
-  var FLY=1700, ZOOM=900, HOLD=700;
-  var arts=plans.map(function(pl,i){
-    var d=makeDart();
-    d.querySelector("circle").setAttribute("fill", pl.color||"#E8402C");
-    gFlight.appendChild(d);
-    var line=el("polyline",{fill:"none",stroke:pl.color||"#E8402C","stroke-width":1.8,
-      "stroke-opacity":".45","vector-effect":"non-scaling-stroke"});
-    gFlight.appendChild(line);
-    return {d:d, line:line, pts:[],
-      S:{x:300+i*180, y:SH+120},                       /* 나란히 서서 동시에 던진다 */
+  var n=plans.length;
+  var cols = n<=1?1 : (n<=4?2 : 3);
+  splitEl.style.gridTemplateColumns="repeat("+cols+",minmax(0,1fr))";
+  splitEl.innerHTML="";
+  splitEl.style.display="grid";
+
+  var VBX=452, VBY=44, VBW=340, VBH=452;    /* 판을 꽉 채운 화각 */
+  var panes=plans.map(function(pl){
+    var box=document.createElement("div");
+    box.className="pane";
+    var tag=document.createElement("div");
+    tag.className="ptag";
+    tag.style.setProperty("--c", pl.color);
+    tag.textContent=pl.name;
+    box.appendChild(tag);
+
+    var svg=document.createElementNS(NS,"svg");
+    svg.setAttribute("viewBox", VBX+" "+VBY+" "+VBW+" "+VBH);
+    svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+    svg.appendChild(el("rect",{x:VBX,y:VBY,width:VBW,height:HORIZON-VBY,fill:"url(#sky)"}));
+    svg.appendChild(el("rect",{x:VBX,y:HORIZON,width:VBW,height:VBY+VBH-HORIZON,fill:"url(#grdg)"}));
+    svg.appendChild(boardSnapshot.cloneNode(true));
+    var line=el("polyline",{fill:"none",stroke:pl.color,"stroke-width":2,"stroke-opacity":".5",
+      "vector-effect":"non-scaling-stroke"});
+    svg.appendChild(line);
+    var dart=makeDart();
+    dart.querySelector("circle").setAttribute("fill", pl.color);
+    svg.appendChild(dart);
+    box.appendChild(svg);
+    splitEl.appendChild(box);
+
+    return {pl:pl, dart:dart, line:line, pts:[],
+      S:{x:sx(pl.baseX), y:VBY+VBH+150},
       B:{x:sx(pl.baseX), y:sy(pl.baseY)},
-      E:{x:sx(pl.landX), y:sy(pl.landY)}, pl:pl};
+      E:{x:sx(pl.landX), y:sy(pl.landY)}};
   });
 
-  cam.style.animation="none";
-  gHand.style.opacity="0";
-  heldDart.style.opacity="0";
+  var FLY=1900, HOLD=900, t0=null, curSeg=-1;
+  var lead=plans[0];
 
-  var t0=null, curSeg=-1;
   function tick(now){
     if(t0===null) t0=now;
-    var ms=now-t0, t=Math.min(1, ms/FLY);
+    var t=Math.min(1,(now-t0)/FLY);
 
-    /* 대표 바람(1번 계획)으로 HUD를 갱신한다 */
-    var lead=plans[0];
     var si=Math.min(lead.n-1, Math.floor(t*lead.n));
     if(si!==curSeg){ curSeg=si; applyWind(lead.segs[si].w); if(si>0) flashGust(lead.segs[si].w); }
 
-    arts.forEach(function(a){
-      var pl=a.pl, i2=Math.min(pl.n-1, Math.floor(t*pl.n)), local=Math.min(1, t*pl.n-i2), j, ax=0, ay=0;
+    panes.forEach(function(a){
+      var pl=a.pl, i2=Math.min(pl.n-1, Math.floor(t*pl.n)), local=Math.min(1,t*pl.n-i2), j, ax=0, ay=0;
       for(j=0;j<i2;j++){ ax+=pl.segs[j].e.x; ay+=pl.segs[j].e.y; }
       ax+=pl.segs[i2].e.x*local; ay+=pl.segs[i2].e.y*local;
       ax/=pl.n; ay/=pl.n;
       var u=easeOut3(t);
       var px2=a.S.x+(a.B.x-a.S.x)*u+(a.E.x-a.B.x)*t+ax*MS;
-      var py2=a.S.y+(a.B.y-a.S.y)*u+(a.E.y-a.B.y)*t+ay*MS-190*Math.sin(Math.PI*t);
-      var sc=3.2+(STUCK-3.2)*u;
-      a.d.setAttribute("transform","translate("+px2.toFixed(1)+","+py2.toFixed(1)+") rotate("+(60*(1-u)).toFixed(1)+") scale("+sc.toFixed(3)+")");
+      var py2=a.S.y+(a.B.y-a.S.y)*u+(a.E.y-a.B.y)*t+ay*MS-120*Math.sin(Math.PI*t);
+      var sc=2.6+(STUCK-2.6)*u;
+      a.dart.setAttribute("transform","translate("+px2.toFixed(1)+","+py2.toFixed(1)+") rotate("+(60*(1-u)).toFixed(1)+") scale("+sc.toFixed(3)+")");
       a.pts.push(px2.toFixed(0)+","+py2.toFixed(0));
       if(a.pts.length>200) a.pts.shift();
       a.line.setAttribute("points", a.pts.join(" "));
     });
 
-    setCam(640, 352, 1.02);
-    coordEl.textContent="VOLLEY  "+plans.length+" DARTS";
+    coordEl.textContent="REPLAY  "+n+" DARTS";
     if(t<1){ requestAnimationFrame(tick); return; }
 
-    arts.forEach(function(a){
-      a.d.setAttribute("data-stuck","1");
-      a.d.setAttribute("transform","translate("+a.E.x.toFixed(1)+","+a.E.y.toFixed(1)+") rotate(0) scale("+STUCK+")");
+    panes.forEach(function(a){
+      a.dart.setAttribute("transform","translate("+a.E.x.toFixed(1)+","+a.E.y.toFixed(1)+") rotate(0) scale("+STUCK+")");
     });
+    setTimeout(finishReplay, HOLD);
+  }
+
+  function finishReplay(){
+    splitEl.style.display="none";
+    splitEl.innerHTML="";
     round=plans.map(function(pl){
       var lon=toLon(pl.landX), lat=toLat(pl.landY);
       var ins=Math.sqrt((pl.landX-INSET.cx)*(pl.landX-INSET.cx)+(pl.landY-INSET.cy)*(pl.landY-INSET.cy))<=INSET.r+2.5;
@@ -1653,39 +1677,21 @@ function mpPlayVolley(plans){
     });
     save(LS_ROUND, round);
     usedWind={shifts:lead.shifts, maxSpd:lead.maxSpd, km:lead.km, note:lead.note};
+    while(gFlight.firstChild) gFlight.removeChild(gFlight.firstChild);
+    round.forEach(function(p){
+      var d=makeDart();
+      d.setAttribute("data-stuck","1");
+      d.querySelector("circle").setAttribute("fill", p.color||"#E8402C");
+      d.setAttribute("transform","translate("+sx(p.x)+","+sy(p.y)+") rotate(0) scale("+STUCK+")");
+      gFlight.appendChild(d);
+    });
     renderRound();
-    setTimeout(zoomCenter, HOLD);
+    stage.classList.remove("away");
+    MP.phase="result";
+    mpRenderLobby(); mpPushState();
+    busy=false;
   }
 
-  function zoomCenter(){
-    var c=centroid(), cx=sx(c.x), cy=sy(c.y), t1=null;
-    function z(now){
-      if(t1===null) t1=now;
-      var u=Math.min(1,(now-t1)/ZOOM), e=easeInOut3(u);
-      setCam(640+(cx-640)*e, 352+(cy-352)*e, 1.02+1.5*e);
-      arts.forEach(function(a){ a.line.setAttribute("stroke-opacity", (0.45*(1-e)).toFixed(2)); });
-      if(u<1){ requestAnimationFrame(z); return; }
-      setTimeout(function(){
-        var t2=null;
-        function back(now2){
-          if(t2===null) t2=now2;
-          var v=Math.min(1,(now2-t2)/700), e2=easeInOut3(v);
-          setCam(cx+(640-cx)*e2, cy+(352-cy)*e2, 2.52+(1-2.52)*e2);
-          if(v<1){ requestAnimationFrame(back); return; }
-          cam.style.transform=""; cam.style.animation="";
-          gHand.style.opacity="1"; heldDart.style.opacity="1";
-          arts.forEach(function(a){ if(a.line.parentNode) a.line.parentNode.removeChild(a.line); });
-          stage.classList.remove("away");
-          MP.phase="result";
-          mpList().forEach(function(p){ p.ready=false; p.aim=null; });
-          renderAims(); mpRenderLobby(); mpPushState();
-          busy=false;
-        }
-        requestAnimationFrame(back);
-      }, 900);
-    }
-    requestAnimationFrame(z);
-  }
   requestAnimationFrame(tick);
 }
 
@@ -1697,31 +1703,39 @@ function mpNameInput(){
 function mpStatus(s){ mpStatusEl.textContent=s||""; }
 function mpRenderLobby(){
   if(!MP.on){
-    lobbyEl.innerHTML='';
+    lobbyEl.innerHTML="";
     joinBoxEl.style.display="";
     roomBoxEl.style.display="none";
     newBtn.style.display="";
-    fireBtn.style.display="none";
+    startBtn.style.display="none";
+    waitEl.style.display="none";
     return;
   }
   joinBoxEl.style.display="none";
   roomBoxEl.style.display="";
   codeEl.textContent=MP.code;
-  var list=mpList();
+
+  var list=mpList(), done=mpThrownCount(), total=list.length;
   lobbyEl.innerHTML=list.map(function(p){
-    return '<span class="pl'+(p.ready?" rdy":"")+'" style="--c:'+p.color+'">'+
+    return '<span class="pl'+(p.thrown?" rdy":"")+'" style="--c:'+p.color+'">'+
            '<i></i>'+esc(p.name)+(p.id===MP.myId?" (나)":"")+'</span>';
   }).join("");
-  var ready=mpReadyCount(), total=list.length;
+
   var msg;
-  if(MP.phase==="count") msg="곧 던집니다";
-  else if(MP.phase==="fly") msg="날아가는 중";
-  else if(MP.phase==="result") msg=MP.host?"«새 판»으로 다시":"결과 확인";
-  else msg="조준 "+ready+" / "+total;
+  if(MP.phase==="lobby") msg=MP.host ? "모이면 시작하세요" : "방장이 시작하기를 기다리는 중";
+  else if(MP.phase==="throw") msg="던짐 "+done+" / "+total;
+  else if(MP.phase==="replay") msg="다 같이 보는 중";
+  else msg=MP.host ? "«새 판»으로 다시" : "결과 확인";
   phaseEl.textContent=msg;
-  fireBtn.style.display = (MP.host && MP.phase==="aim" && ready>0) ? "" : "none";
-  newBtn.style.display = MP.host ? "" : "none";
-  fireBtn.textContent = "동시에 던지기 ("+ready+")";
+
+  startBtn.style.display=(MP.host && MP.phase==="lobby" && total>0) ? "" : "none";
+  startBtn.textContent="시작하기 ("+total+"명)";
+  newBtn.style.display=MP.host ? "" : "none";
+
+  var me=mpMe();
+  var waiting = MP.phase==="throw" && me && me.thrown && done<total;
+  waitEl.style.display = waiting ? "" : "none";
+  if(waiting) waitCountEl.textContent=done+" / "+total+" 명 던짐";
 }
 
 /* ===== 입력 =====
@@ -1750,7 +1764,7 @@ hitAll.addEventListener("click", function(ev){
   var p=boardPoint(ev);
   if(!onBoard(p)) return;
   if(MP.on){
-    if(MP.phase==="aim") mpSetAim(p.x, p.y);   /* 멀티: 클릭은 조준, 발사는 호스트가 */
+    mpThrow(p.x, p.y);          /* 멀티: 시작 뒤에 한 번만, 각자 자기 속도로 */
     return;
   }
   throwDart(p.x, p.y, false);
@@ -1783,22 +1797,27 @@ document.getElementById("newRound").addEventListener("click", function(){
   if(MP.on && !MP.host) return;          /* 판을 비우는 건 방장만 */
   newRound();
   if(MP.on){
-    MP.phase="aim";
-    mpList().forEach(function(p){ p.ready=false; p.aim=null; });
-    renderAims(); mpRenderLobby(); mpPushState();
+    MP.phase="lobby";
+    mpList().forEach(function(p){ p.thrown=false; p.plan=null; });
+    mpRenderLobby(); mpPushState();
   }
 });
 document.getElementById("hostBtn").addEventListener("click", mpHostRoom);
 document.getElementById("joinBtn").addEventListener("click", function(){ mpJoinRoom(codeInEl.value); });
 codeInEl.addEventListener("keydown", function(e){ if(e.key==="Enter") mpJoinRoom(codeInEl.value); });
 document.getElementById("leaveBtn").addEventListener("click", mpLeave);
-fireBtn.addEventListener("click", mpStartVolley);
+startBtn.addEventListener("click", mpStart);
 scene.addEventListener("keydown", function(ev){
   if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); throwDart(0,0,true); }
 });
 
-board.appendChild(gAims);      /* 각자의 조준점은 지도 위에 */
+mpMakeSnapshot();              /* 분할 화면용 깨끗한 지도판 사본 */
 mpRenderLobby();
+
+/* 주소에 #selftest 가 붙었을 때만 열리는 점검용 훅 (평소엔 아무 것도 노출하지 않는다) */
+if(location.hash==="#selftest"){
+  window.__dartkr={MP:MP, replay:mpRunReplay, plan:planThrow, round:function(){ return round; }};
+}
 
 /* ===== 첫 화면: 한 명이 이미 던져둔 상태로 연다 ===== */
 rollWind();
